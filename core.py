@@ -1,9 +1,9 @@
 import numpy as np
-import numpy.typing as npt
+import cupy as cp
 
-Tensor = npt.NDArray[np.float64]
-        
-        
+class Tensor(cp.ndarray): # For typehints
+    pass
+
 class SoftmaxCrossEntropy:
     def __init__(self):
         self.logits: Tensor | None = None
@@ -15,17 +15,17 @@ class SoftmaxCrossEntropy:
         self.targets = targets
         # x is (B, seq_len, out_dim) (logits)
         # targets is one hot encoded of shape (B, seq_len, out_dim) so for each token we have correct next one, as one-hot
-        max_logits = np.max(logits, axis=-1, keepdims=True) # (B, seq_len, 1)
+        max_logits = cp.max(logits, axis=-1, keepdims=True) # (B, seq_len, 1)
         shifted_logits = logits - max_logits # Broadcasts, (B, seq_len, out_dim) 
         
-        exp_logits = np.exp(shifted_logits) # (B, seq_len, out_dim)
-        exp_sum = np.sum(exp_logits, axis=-1, keepdims=True) # (B, seq_len, 1)
+        exp_logits = cp.exp(shifted_logits) # (B, seq_len, out_dim)
+        exp_sum = cp.sum(exp_logits, axis=-1, keepdims=True) # (B, seq_len, 1)
         self.probs = exp_logits / exp_sum # Broadcasts, (B, seq_len, out_dim)
         
-        log_probs = np.log(self.probs) # takes the natural log to calc the neg log likelihood
+        log_probs = cp.log(self.probs) # takes the natural log to calc the neg log likelihood
         log_probs = log_probs * targets # plucks out correct class via one-hot
-        batch_loss = -np.sum(log_probs, axis=-1) # (B, seq_len)
-        batch_loss = np.mean(batch_loss)
+        batch_loss = -cp.sum(log_probs, axis=-1) # (B, seq_len)
+        batch_loss = cp.mean(batch_loss)
         
         return batch_loss
     
@@ -48,7 +48,7 @@ class MSELoss:
         self.targets = targets
         
         loss = (targets - preds) ** 2
-        loss = np.mean(loss)
+        loss = cp.mean(loss)
 
         return loss
     
@@ -70,7 +70,7 @@ class Embedding:
         self.input_dim = input_dim
         self.embed_dim = embed_dim
         
-        self.embeddings: Tensor = np.random.randn(input_dim, embed_dim)
+        self.embeddings: Tensor = cp.random.randn(input_dim, embed_dim)
         
     def forward(self, x) -> Tensor:
         self.input_cache = x
@@ -78,15 +78,15 @@ class Embedding:
         return self.embeddings[x] # (x.shape, embed_dim)
     
     def backward(self, out_grad):
-        self.dembeddings = np.zeros_like(self.embeddings)
-        np.add.at(self.dembeddings, self.input_cache, out_grad)
+        self.dembeddings = cp.zeros_like(self.embeddings)
+        cp.add.at(self.dembeddings, self.input_cache, out_grad)
         
         # For each input_cache[a, b] takes index as value, looks at out_grad[a, b] takes vector
         # and adds the vector at dembeddings[index]
         return self.dembeddings
     
     def step(self, learning_rate, clip_val=1.0):
-        np.clip(self.dembeddings, -clip_val, clip_val, self.dembeddings)
+        cp.clip(self.dembeddings, -clip_val, clip_val, self.dembeddings)
         
         self.embeddings -= learning_rate * self.dembeddings
         
@@ -104,13 +104,13 @@ class RNN:
         self.input_cache: Tensor | None = None
         
         # Initialize weights
-        self.W_xh: Tensor = np.random.randn(input_dim, hidden_dim) * np.sqrt(1 / input_dim)
-        self.W_hh: Tensor = np.random.randn(hidden_dim, hidden_dim) * np.sqrt(1 / hidden_dim)
-        self.W_hy: Tensor = np.random.randn(hidden_dim, output_dim) * np.sqrt(1 / hidden_dim)
+        self.W_xh: Tensor = cp.random.randn(input_dim, hidden_dim) * cp.sqrt(1 / input_dim)
+        self.W_hh: Tensor = cp.random.randn(hidden_dim, hidden_dim) * cp.sqrt(1 / hidden_dim)
+        self.W_hy: Tensor = cp.random.randn(hidden_dim, output_dim) * cp.sqrt(1 / hidden_dim)
         
         # Initialize bias to 0
-        self.bh: Tensor = np.zeros((hidden_dim))
-        self.by: Tensor = np.zeros((output_dim))
+        self.bh: Tensor = cp.zeros((hidden_dim))
+        self.by: Tensor = cp.zeros((output_dim))
         
     def params(self):
         return [
@@ -131,7 +131,7 @@ class RNN:
         self.batch_size = B
         
         if h_prev is None:
-            h_prev: Tensor = np.zeros((B, self.hidden_dim))
+            h_prev: Tensor = cp.zeros((B, self.hidden_dim))
             
         self.init_h_prev = h_prev
             
@@ -144,12 +144,12 @@ class RNN:
             next_part = x_t @ self.W_xh # (B, input_dim) @ (input_dim, hidden_dim) -> (B, hidden_dim)
             
             combined_part = prev_part + next_part + self.bh
-            h_next = np.tanh(combined_part) # (B, hidden_dim) + (B, hidden_dim) + (hidden_dim)
+            h_next = cp.tanh(combined_part) # (B, hidden_dim) + (B, hidden_dim) + (hidden_dim)
             
             self.hidden_states.append(h_next)
             h_prev = h_next
             
-        self.hidden_states = np.stack(self.hidden_states, axis=1) # (B, seq_len, hidden_dim)
+        self.hidden_states = cp.stack(self.hidden_states, axis=1) # (B, seq_len, hidden_dim)
         output = self.hidden_states @ self.W_hy + self.by # (B, seq_len, hidden_dim) @ (hidden_dim, out_dim) + (out_dim) -> (B, seq_len, out_dim)
         
         return output, h_next
@@ -160,9 +160,9 @@ class RNN:
         # dlogits is (B, seq_len, out_dim)
         
         # Accumulation part (zero out at the start of each) so we dont accumulate
-        self.dW_xh = np.zeros_like(self.W_xh)
-        self.dW_hh = np.zeros_like(self.W_hh)
-        self.dbh = np.zeros_like(self.bh)
+        self.dW_xh = cp.zeros_like(self.W_xh)
+        self.dW_hh = cp.zeros_like(self.W_hh)
+        self.dbh = cp.zeros_like(self.bh)
         
         # Possible to calculate off the cuff
         self.dhidden_states = dlogits @ self.W_hy.T
@@ -172,10 +172,10 @@ class RNN:
         flat_hidden = self.hidden_states.reshape(-1, self.hidden_dim) # (B * seq_len, hidden_dim)
         flat_dlogits = dlogits.reshape(-1, self.output_dim) # (B * seq_len, out_dim)
         self.dW_hy = flat_hidden.T @ flat_dlogits  # (hidden_dim, B * seq_len) @ (B * seq_len, out_dim)
-        self.dby = np.sum(dlogits, axis=(0, 1)) # (out_dim)
+        self.dby = cp.sum(dlogits, axis=(0, 1)) # (out_dim)
         
         # Init the next step to run backwards our forward loop
-        dh_next = np.zeros((self.batch_size, self.hidden_dim))
+        dh_next = cp.zeros((self.batch_size, self.hidden_dim))
         
         # Array for holding change wrt. embeds (x_ts)
         dx_ts = []
@@ -194,7 +194,7 @@ class RNN:
             # Prev part and next part are same shapes. The grad for addition is 1 * out_grad (dh_preact_t) = out_grad
             dprev_part_t = dh_preact_t 
             dnext_part_t = dh_preact_t
-            self.dbh += np.sum(dh_preact_t, axis=0) # (hidden_dim)
+            self.dbh += cp.sum(dh_preact_t, axis=0) # (hidden_dim)
             
             # impacts current output and future output.
             dh_prev = dprev_part_t @ self.W_hh.T # how t - 1 influences t and ones after till the end
@@ -217,7 +217,7 @@ class RNN:
             # if the gradient explodes DURING backwards pass then we might have to clip it inside BPTT
             #np.clip(dh_prev, -1, 1, out=dh_prev)
             
-        dx_ts = np.stack(dx_ts, axis=1) # (B, seq_len, input_dim)
+        dx_ts = cp.stack(dx_ts, axis=1) # (B, seq_len, input_dim)
         
         return dx_ts
         
@@ -225,7 +225,7 @@ class RNN:
     def step(self, learning_rate, clip_val=1.0):
         # Clip grads before substraction
         for p, grad in self.params():
-            np.clip(grad, -clip_val, clip_val, out=grad)
+            cp.clip(grad, -clip_val, clip_val, out=grad)
             # the out means we do it in place (or points just to the location)
             
         # Update parameters
