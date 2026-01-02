@@ -70,13 +70,27 @@ class Embedding:
         self.input_dim = input_dim
         self.embed_dim = embed_dim
         
-        self.embeddings = np.random.randn(input_dim, embed_dim)
+        self.embeddings: Tensor = np.random.randn(input_dim, embed_dim)
         
-    def forward(self, x):
+    def forward(self, x) -> Tensor:
         self.input_cache = x
+        
         return self.embeddings[x] # (x.shape, embed_dim)
     
+    def backward(self, out_grad):
+        self.dembeddings = np.zeros_like(self.embeddings)
+        np.add.at(self.dembeddings, self.input_cache, out_grad)
+        
+        # For each input_cache[a, b] takes index as value, looks at out_grad[a, b] takes vector
+        # and adds the vector at dembeddings[index]
+        return self.dembeddings
     
+    def step(self, learning_rate, clip_val=1.0):
+        np.clip(self.dembeddings, -clip_val, clip_val, self.dembeddings)
+        
+        self.embeddings -= learning_rate * self.dembeddings
+        
+        # Idk if its possible to get dinputs bc they are indices
         
 
 class RNN:
@@ -153,6 +167,8 @@ class RNN:
         # Possible to calculate off the cuff
         self.dhidden_states = dlogits @ self.W_hy.T
         
+        # The part below works because we have to sum up the influences of W_hy across logits in all batches,
+        # and flattened dot product essentially adds also cross-batch
         flat_hidden = self.hidden_states.reshape(-1, self.hidden_dim) # (B * seq_len, hidden_dim)
         flat_dlogits = dlogits.reshape(-1, self.output_dim) # (B * seq_len, out_dim)
         self.dW_hy = flat_hidden.T @ flat_dlogits  # (hidden_dim, B * seq_len) @ (B * seq_len, out_dim)
@@ -219,16 +235,7 @@ class RNN:
         
         self.W_hy -= learning_rate * self.dW_hy
         self.by -= learning_rate * self.dby
-
         
-            
-            
-            
-            
-            
-            
-            
-            
         
         
         
