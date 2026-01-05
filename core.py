@@ -86,7 +86,8 @@ class Embedding:
         return self.dembeddings
     
     def step(self, learning_rate, clip_val=1.0):
-        cp.clip(self.dembeddings, -clip_val, clip_val, self.dembeddings)
+        if clip_val != 0.0:
+            cp.clip(self.dembeddings, -clip_val, clip_val, self.dembeddings)
         
         self.embeddings -= learning_rate * self.dembeddings
         
@@ -215,7 +216,7 @@ class RNN:
             # which were current + future one step ago, but now its just future.
             
             # if the gradient explodes DURING backwards pass then we might have to clip it inside BPTT
-            #np.clip(dh_prev, -1, 1, out=dh_prev)
+            cp.clip(dh_prev, -1, 1, out=dh_prev)
             
         dx_ts = cp.stack(dx_ts, axis=1) # (B, seq_len, input_dim)
         
