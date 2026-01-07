@@ -218,9 +218,21 @@ class RNN:
             # if the gradient explodes DURING backwards pass then we might have to clip it inside BPTT
             cp.clip(dh_prev, -1, 1, out=dh_prev)
             
-        dx_ts = cp.stack(dx_ts, axis=1) # (B, seq_len, input_dim)
+        dx_ts = cp.stack(dx_ts[::-1], axis=1) # (B, seq_len, input_dim), we reverse back bc we iterated in reverse
         
         return dx_ts
+    
+    # Good mental model to think about why we accumulate gradient over each step:
+    # Imagine the input is 5 people trying to hit a nail. Situation is following:
+    # Person 5 hit the nail off the center. The loss is that he should aim better
+    # Person 4 hit the nail a bit too high
+    # Person 3 missed
+    # Person 2 missed
+    # Person 1 hit the nail, but broke it sideways making it way harder for other people to hit it
+    # The gradient at person 1 will be a whole lot bigger because he messed things up for all people later
+    # The gradient for person 5 will be to aim better, same with 4, 3 and 2.
+    # We accumulate because we sum this "local error" and its effect on the future, where mistakes early on can cause huge deviations later
+    
         
         
     def step(self, learning_rate, clip_val=1.0):
