@@ -63,6 +63,27 @@ class MSELoss:
         
         return grad 
     
+class CosineScheduler:
+    def __init__(self, max_lr: float, min_lr: float, warmup_epochs: int, total_epochs: int):
+        self.max_lr = max_lr
+        self.min_lr = min_lr
+        self.warmup_epochs = warmup_epochs
+        self.total_epochs = total_epochs
+
+    def get_lr(self, epoch): # We are passing epoch + 1 
+        if epoch <= self.warmup_epochs:
+            return epoch / self.warmup_epochs * self.max_lr
+        
+        else:
+            decay_epochs = self.total_epochs - self.warmup_epochs
+            current_decay_epoch = epoch - self.warmup_epochs
+
+            cosine_coeff = current_decay_epoch / decay_epochs
+
+            return self.min_lr + (1 / 2) * (self.max_lr - self.min_lr) * (1 + np.cos(np.pi * cosine_coeff)) # The cos part is at most 2, least 0
+
+
+    
 class Embedding:
     def __init__(self, input_dim, embed_dim):
         self.input_cache: Tensor | None = None
@@ -216,12 +237,12 @@ class RNN:
             # which were current + future one step ago, but now its just future.
             
             # if the gradient explodes DURING backwards pass then we might have to clip it inside BPTT
-            cp.clip(dh_prev, -1, 1, out=dh_prev)
+            cp.clip(dh_next, -1, 1, out=dh_next)
             
         dx_ts = cp.stack(dx_ts[::-1], axis=1) # (B, seq_len, input_dim), we reverse back bc we iterated in reverse
         
         return dx_ts
-    
+        
     # Good mental model to think about why we accumulate gradient over each step:
     # Imagine the input is 5 people trying to hit a nail. Situation is following:
     # Person 5 hit the nail off the center. The loss is that he should aim better

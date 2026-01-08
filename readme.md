@@ -5,11 +5,12 @@ Implementation of a Recurrent Neural Network **from scratch** in NumPy, using ju
 ## Features
 
 - Manually written forward pass and Backpropagation Through Time `(BPTT)`
-- Full model and layers implemented from scratch:
+- Full model, layers and utilities implemented from scratch:
     - `RNN`
     - `Embedding`
     - `SoftmaxCrossEntropy`
     - `MSELoss`
+    - `CosineScheduler`
 - Simple SGD param update
 - Stacking RNN models on one another to boost performance
 
@@ -23,7 +24,7 @@ Implementation of a Recurrent Neural Network **from scratch** in NumPy, using ju
 ### 2. Text Generation (Sherlock Holmes)
 - File: `text_gen.ipynb`
 - Trains a model to generate continous text based on Sherock Holmes book
-- Achieves loss of 1.50 and outputs sentences that are similar to english, somewhat correctly uses punctuation
+- Achieves loss of 0.3 and outputs some sentences that are actually english "I have heard of you, I am sure", I have checked and this phrase does not appear in Sherlock Holmes
 - Shows that simple RNN performs decently in NLP (I want to have a comparison before I move on to LSTMs)
 
 ### 3. Three-Body Gravity Simulation
